@@ -1,6 +1,6 @@
 # umsamples #
 
- A set of API samples tools that illustrate the use of the Usage Meter API
+ A set of API samples that illustrate the use of the Usage Meter API
 
  
 ### [umCustomerMgmt](docs/umCustomerMgmt.md) ###
