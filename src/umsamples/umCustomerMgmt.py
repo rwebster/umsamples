@@ -14,7 +14,7 @@
 # Prior to execution, an API token must be generated using the Usage Meter UI and the value passed with the -t flag.
 #
 # Test Sample 3.5
-# python umCustomerMgmt.py -s 10.134.3.240:8443  -t TOKHYCFE05BIHXAUJQJA1NVNRWKWI4EF5DS  -i /tmp/customers.tsv -d
+# python umCustomerMgmt.py -s 10.134.3.240:8443  -t TOKHYCFE05BIHXAUJQJA1NVNRWKWI4EF5DS  -i ../../test/customers.tsv -d
 #
 #
 # Author: Bob Webster
@@ -32,7 +32,7 @@ import xmltodict
 import logging
 
 
-
+debug = False
 
 def find_between( s, first, last ):
     try:
@@ -42,43 +42,41 @@ def find_between( s, first, last ):
     except ValueError:
         return ""
 
-def usage():
-
-      print 'Usage umManageCustomers.py -s 10.32.51.xxx:8443  -t TOK3W1T0BZZGBQ4CUIEFSUF4B3RDX3ETUDT  -i  ./customerFile.tsv -d' 
-      print ' -s  = Usage Meter Appliance and port'
-      print ' -t  = API Token from Usage Meter for API authentication'
-      print ' -i  = customer input file containing custmoers in tab separated format'
-      print ' -d  = debug'
 
 
-def getAllCustomerIds(UMserver, headers, debug):
+# Get all customers and build a dictionary of customer name to id.
+# returns a dictionary where key=customername value=id otherwise an empty dictionary
+def get_all_customer_ids(UMserver, UMtoken):
 
-    # Get list of customers
-
+    # Using Session, token no longer required, note put/post calls return 403 without Content-Type: application/xml
+    headers = {'x-usagemeter-authorization': UMtoken, 'Content-Type': 'application/xml', 'User-Agent': 'Mozilla/5.0 (Windows NT 6.0; WOW64; rv:24.0) Gecko/20100101 Firefox/24.0' }
+    keyDict = {}
+    
     try:
       customerList = requests.get("https://" + UMserver  + "/um/api/customers", headers=headers, verify=False, timeout=10);
 
       if debug:
           print customerList.status_code
 
-      if customerList.status_code == 401:
-          print ("Server returned Unauthorized: Invalid api token?")
-          sys.exit(3)
+      if customerList.status_code != 200:
+        return keyDict
 
       if debug:
-          print customerList.text
+          print customerList.content
 
       # Parse XML into Dict
 
       doc = xmltodict.parse(customerList.content)
-      print "Doc " + str(doc)
+      if debug:
+          print "XML Doc as Dict " + str(doc)
 
       # Build customer name - id dictionay
-      keyDict = {}
+ 
       for c in doc['customers']['customer']:
             keyDict[c['name']] = c['id']
 
-      print str(keyDict)
+      if debug:
+          print str(keyDict)
 
     except requests.exceptions.Timeout:
           print "Unable to access server, timeout"
@@ -86,7 +84,13 @@ def getAllCustomerIds(UMserver, headers, debug):
 
     return keyDict
 
-def getCustomer(UMserver, headers, id, debug):
+
+# Return a single customer record from the UM Server
+# Returns true on success
+def get_customer(UMserver, UMtoken, id):
+
+  # Using Session, token no longer required, note put/post calls return 403 without Content-Type: application/xml
+    headers = {'x-usagemeter-authorization': UMtoken, 'Content-Type': 'application/xml', 'User-Agent': 'Mozilla/5.0 (Windows NT 6.0; WOW64; rv:24.0) Gecko/20100101 Firefox/24.0' }
 
 
     # Get customer
@@ -95,14 +99,15 @@ def getCustomer(UMserver, headers, id, debug):
       customer = requests.get("https://" + UMserver  + "/um/api/customer/" + id, headers=headers, verify=False, timeout=10);
 
       if debug:
+          print "https://" + UMserver  + "/um/api/customer/" + id
           print customer.status_code
-
-      if customer.status_code == 401:
-          print ("Server returned Unauthorized: Invalid api token?")
-          sys.exit(3)
-
-      if debug:
           print customer.content
+
+      if customer.status_code != 200:
+         print "Error Retrieving customer " + name + " msg= " + customer.content
+         return False
+
+      return True
 
 
     except requests.exceptions.Timeout:
@@ -110,8 +115,12 @@ def getCustomer(UMserver, headers, id, debug):
           sys.exit(4)
 
 
-def updateCustomer(UMserver, headers, id, name, country, postalCode, debug):
+# Update an existing customer record in the UM Server
+# Returns true on success
+def update_customer(UMserver, UMtoken, id, name, country, postalCode):
+    global debug
 
+    headers = {'x-usagemeter-authorization': UMtoken, 'Content-Type': 'application/xml', 'User-Agent': 'Mozilla/5.0 (Windows NT 6.0; WOW64; rv:24.0) Gecko/20100101 Firefox/24.0' }
 
     # Update customer
 
@@ -121,28 +130,232 @@ def updateCustomer(UMserver, headers, id, name, country, postalCode, debug):
            "<country>" + country + "</country>\n" + \
            "<postalCode>" + postalCode  + "</postalCode>\n" + \
            "</customer>\n"
-   #   "<customer xmlns=\"http://www.vmware.com/UM\">\n" + \
            
     try:
-      print "https://" + UMserver  + "/um/api/customer/" + id
-      print body
 
       customer = requests.put("https://" + UMserver  + "/um/api/customer/" + id, headers=headers, data=body, verify=False, timeout=10);
 
       if debug:
+          print "https://" + UMserver  + "/um/api/customer/" + id
           print customer.status_code
+          print customer.content
 
-      if customer.status_code == 401:
-          print ("Server returned Unauthorized: Invalid api token?")
-          sys.exit(3)
+      if customer.status_code != 200:
+          print "Error Updating customer " + name + " msg= " + customer.content
+          return False
+
+      return True
+
+    except requests.exceptions.Timeout:
+          print "Unable to access server, timeout"
+          sys.exit(4)
+
+
+# Create an new customer record in the UM Server
+# Returns true on success
+def create_customer(UMserver, UMtoken, name, country, postalCode):
+    global debug
+
+    # note put/post calls return 403 without Content-Type: application/xml
+    headers = {'x-usagemeter-authorization': UMtoken, 'Content-Type': 'application/xml', 'User-Agent': 'Mozilla/5.0 (Windows NT 6.0; WOW64; rv:24.0) Gecko/20100101 Firefox/24.0' }
+
+    # Create customer
+
+    body = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" + \
+           "<customer xmlns=\"http://www.vmware.com/UM\">\n" + \
+           "<name>" + name + "</name>\n" + \
+           "<country>" + country + "</country>\n" + \
+           "<postalCode>" + postalCode  + "</postalCode>\n" + \
+           "</customer>\n"
+
+           
+    try:
+      if debug:
+
+         print "https://" + UMserver  + "/um/api/customer/" 
+         print body
+
+      customer = requests.post("https://" + UMserver  + "/um/api/customer", headers=headers, data=body, verify=False, timeout=10);
 
       if debug:
+          print "https://" + UMserver  + "/um/api/customer/" + id
+          print customer.status_code
           print customer.content
+
+      if customer.status_code != 201:
+          print "Error Creating customer " + name + " msg= " + customer.content
+          return False
+
+      return True
 
 
     except requests.exceptions.Timeout:
           print "Unable to access server, timeout"
           sys.exit(4)
+
+
+# Delete an existing customer record in the UM Server
+# Returns true on success
+def delete_customer(UMserver, UMtoken, name, id):
+    global debug
+
+    # note put/post calls return 403 without Content-Type: application/xml
+    headers = {'x-usagemeter-authorization': UMtoken, 'Content-Type': 'application/xml', 'User-Agent': 'Mozilla/5.0 (Windows NT 6.0; WOW64; rv:24.0) Gecko/20100101 Firefox/24.0' }
+
+    # Delete customer
+           
+    try:
+      if debug:
+
+         print "https://" + UMserver  + "/um/api/customer/" 
+         print body
+
+      customer = requests.delete("https://" + UMserver  + "/um/api/customer/" + id, headers=headers, verify=False, timeout=10);
+
+      if debug:
+          print "https://" + UMserver  + "/um/api/customer/" + id
+          print customer.status_code
+          print customer.content
+
+      if customer.status_code != 204:
+          print "Error Deleting customer " + name + " msg= " + customer.content
+          return False
+
+      return True
+
+
+    except requests.exceptions.Timeout:
+          print "Unable to access server, timeout"
+          sys.exit(4)
+
+
+def create_session(UMserver, UMtoken):
+
+    global debug
+
+    headers = {'x-usagemeter-authorization': UMtoken, 'User-Agent': 'Mozilla/5.0 (Windows NT 6.0; WOW64; rv:24.0) Gecko/20100101 Firefox/24.0' }
+
+
+    # Supress associated InsecureRequestWarning for UM with Self Signed Cert
+    requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+
+    if debug:
+
+      #logging.basicConfig(level=logging.DEBUG)
+      debug_requests_on()
+
+    #
+    # Get UM version from banner page title -  <title>VMware vCloud Usage Meter 3.5</title>
+    #
+    try:
+         banner = requests.get("https://" + UMserver  + "/um/", headers=headers, verify=False, timeout=10);
+         v = find_between( banner.content, 'VMware vCloud Usage Meter ', '</title>' )
+         print "UM Version: " + v
+    except requests.exceptions.SSLError as e:
+
+       # For UM 3.2, 3.3 or 3.4 Versions
+       # ("bad handshake: Error([('SSL routines', 'tls_process_ske_dhe', 'dh key too small')],)     
+       # Must adjust ssl Cyphers and try again 
+       requests.packages.urllib3.util.ssl_.DEFAULT_CIPHERS += 'HIGH:!DH:!aNULL'
+       try:
+          requests.packages.urllib3.contrib.pyopenssl.DEFAULT_SSL_CIPHER_LIST += 'HIGH:!DH:!aNULL'
+       except AttributeError:
+          # no pyopenssl support used / needed / available
+           pass
+       try:    
+           banner = requests.get("https://" + UMserver  + "/um/", headers=headers, verify=False, timeout=10);
+           v = find_between( banner.text, 'VMware vCloud Usage Meter ', '</title>' )
+           print "UM Version: " + v
+       except requests.exceptions.SSLError as e:
+           print "http.requests ssl error: " + str(e)
+           sys.exit(2)
+
+    except requests.exceptions.RequestException as e:
+       print "http.requests error: " + str(e)
+       sys.exit(2)
+
+    #   Use alternative transport adapter to set retry count
+    #   So rety if    requests.exceptions.ConnectionError
+         
+    session = requests.Session()
+    session.mount('https://' + UMserver, HTTPAdapter(max_retries=5))
+
+
+def process_input_file(UMserver, UMtoken, inputFile, custKeyDict):
+
+    global debug
+    updatedCount =0
+    createdCount =0
+    deletedCount =0
+    errorCount =0
+
+    # open input file
+    try:
+       csv.register_dialect('tab', delimiter='\t')
+       f_input_file = open(inputFile, 'r')
+
+    except (Exception) as error:
+        print "Error: Unable to open specified input file."
+        print(error)
+        sys.exit(4)
+
+    print "Successfully opened input file.  \n"
+
+    try:
+        reader = csv.reader(f_input_file, dialect='tab')
+
+        # Read input file, ignoring rules section and comments
+        for record in reader:
+                 if record[0].startswith('# Rules'):
+                      break
+                 elif record[0].startswith('#'):
+                      next(reader)
+                 else:
+                      # Existing customer?
+                      if record[0] in custKeyDict:
+                           
+                           # delete request? Name and no other columns?
+                           if len(record) == 1:
+                                if delete_customer(UMserver, UMtoken, record[0], custKeyDict[record[0]]):
+                                   deletedCount = deletedCount + 1
+                                else:
+                                    errorCount = errorCount + 1
+                           else:
+                                if update_customer(UMserver, UMtoken, custKeyDict[record[0]], record[0], record[1], record[2]):
+                                    updatedCount = updatedCount + 1
+                                else: 
+                                    errorCount = errorCount + 1
+
+                      # New Customer
+                      else: 
+                           if len(record) == 1:
+                               print "Error: Customer " + record[0] + " does not exist and cannot be deleted."
+                               errorCount = errorCount + 1
+                           else:
+                             #                                  customerName, Country, PostalCode
+                             if create_customer(UMserver, UMtoken, record[0], record[1], record[2]):
+                                createdCount = createdCount + 1
+                             else:
+                                errorCount = errorCount + 1
+
+        print "\nProcessing complete."
+        print "\tCreated Customers  " + str(createdCount)
+        print "\tUpdated Customers: " + str(updatedCount)
+        print "\tDeleted Customers  " + str(deletedCount)
+        print "\tError Count: " + str(errorCount)
+      
+        # get_customer(UMserver, UMtoken, "4")
+
+    except (Exception) as error:
+        print "Error: Processing Error "
+        print(error)
+        print traceback.format_exc()
+
+
+    finally:
+        f_input_file.close()
+
+
 
 def debug_requests_on():
     '''Switches on logging of the requests module.'''
@@ -154,20 +367,30 @@ def debug_requests_on():
     requests_log.setLevel(logging.DEBUG)
     requests_log.propagate = True
 
+def usage():
+
+      print 'Usage umManageCustomers.py -s 10.32.51.xxx:8443  -t TOK3W1T0BZZGBQ4CUIEFSUF4B3RDX3ETUDT  -i  ./customerFile.tsv -d' 
+      print ' -s  = Usage Meter Appliance and port'
+      print ' -t  = API Token from Usage Meter for API authentication'
+      print ' -i  = customer input file containing custmoers in tab separated format'
+      print ' -d  = debug'
+
+
 ######################
 ### Main
 ######################
 
 def main(argv):
 
+
+    # Process command line input
+
     headers = "";
-    debug = False
+    global debug
 
     try:
        opts, args = getopt.getopt(argv,"hds:t:i:")
     except getopt.GetoptError:
-
-     
        usage()
        sys.exit(2)
 
@@ -193,135 +416,19 @@ def main(argv):
      sys.exit(3)
 
 
+    # Connect to UM Server
+    create_session(UMserver, UMtoken)
 
-    # Supress associated InsecureRequestWarning for UM with Self Signed Cert
-    requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+    # Get all customers and build a name - key dictionary
+    custKeyDict = get_all_customer_ids(UMserver, UMtoken)
+    if len(custKeyDict) == 0:
+      print "Error retrieving customer list from server."
+      sys.exit(3)
 
-    if debug:
-
-      #logging.basicConfig(level=logging.DEBUG)
-      debug_requests_on()
-
-    # Get UM version from banner page title -  <title>VMware vCloud Usage Meter 3.5</title>
-    try:
-         banner = requests.get("https://" + UMserver  + "/um/", headers=headers, verify=False, timeout=10);
-         v = find_between( banner.text, 'VMware vCloud Usage Meter ', '</title>' )
-         print "UM Version: " + v
-    except requests.exceptions.SSLError as e:
-
-       # For UM 3.2, 3.3 or 3.4 Versions
-       # ("bad handshake: Error([('SSL routines', 'tls_process_ske_dhe', 'dh key too small')],)     
-       # Must adjust ssl Cyphers and try again 
-       requests.packages.urllib3.util.ssl_.DEFAULT_CIPHERS += 'HIGH:!DH:!aNULL'
-       try:
-          requests.packages.urllib3.contrib.pyopenssl.DEFAULT_SSL_CIPHER_LIST += 'HIGH:!DH:!aNULL'
-       except AttributeError:
-          # no pyopenssl support used / needed / available
-           pass
-       try:    
-           banner = requests.get("https://" + UMserver  + "/um/", headers=headers, verify=False, timeout=10);
-           v = find_between( banner.text, 'VMware vCloud Usage Meter ', '</title>' )
-           print "UM Version: " + v
-       except requests.exceptions.SSLError as e:
-           print "http.requests ssl error: " + str(e)
-
-    except requests.exceptions.RequestException as e:
-       print "http.requests error: " + str(e)
-       sys.exit(2)
-
-
-    if v.startswith( '3.2' ):
-       UMversion = '3.2'
-    elif v.startswith( '3.3'):  
-       UMversion = '3.3'
-    elif v.startswith( '3.4'):
-       UMversion = '3.4'
-    elif v.startswith( '3.5'):
-       UMversion = '3.5'
-    else: 
-       print ("Error: Could not determine UM Version. Is server a UM Appliance? ")
-       print ("Suggestion: Use Browser to validate login to UM Server UI is successful.")
-       sys.exit(2)
-
-   #   Use alternative transport adapter to set retry count
-   #   http://stackoverflow.com/questions/15431044/can-i-set-max-retries-for-requests-request
-   #   So retries happen if    requests.exceptions.ConnectionError
-         
-    session = requests.Session()
-    session.mount('https://' + UMserver, HTTPAdapter(max_retries=5))
-
-    # Put calls return 403 without Content-Type: application/xml
-    headers = {'x-usagemeter-authorization': UMtoken, 'Content-Type': 'application/xml', 'User-Agent': 'Mozilla/5.0 (Windows NT 6.0; WOW64; rv:24.0) Gecko/20100101 Firefox/24.0' }
-
-    # Get all customers and build name - key list
-
-    custKeyDict = getAllCustomerIds(UMserver, headers, debug)
-
-
+  
+    # Process updates
+    process_input_file(UMserver, UMtoken, inputFile, custKeyDict)
     
-    # open input file
-    try:
-       csv.register_dialect('tab', delimiter='\t')
-
-       f_input_file = open(inputFile, 'r')
-
-    except (Exception) as error:
-        print "Error: Unable to open specified input file."
-        print(error)
-        sys.exit(4)
-
-    print "Successfully opened file.  \n"
-
-    try:
-        reader = csv.reader(f_input_file, dialect='tab')
-
-        for row in reader:
-                 if row[0].startswith('# Rules'):
-                      break
-                 elif row[0].startswith('#'):
-                      next(reader)
-                 else:
-                      print "row is " + str(row)
-                      print "\tCustomer " + row[0] + " Key is " + custKeyDict[row[0]] 
-
-
-                     # getCustomer(UMserver, headers, custKeyDict[row[0]], debug)
-
-        updateCustomer(UMserver, headers, "4", "CustomerC", "US", "43017", debug)
-        getCustomer(UMserver, headers, "4", debug)
-
-    except (Exception) as error:
-        print "Error: Processing Error "
-        print(error)
-        print traceback.format_exc()
-        sys.exit(4)
-
-    finally:
-        f_input_file.close()
-
-
-
-
-   ###############
-   ## Get reports
-   ###############
-
- #  if   UMversion == "3.2":
- #        metaDataDict = process_32_reports(UMserver, UMtoken, beginDateTime, countMonths, outputFile, descendingsort, debug)
-
- #  elif UMversion == "3.3": 
- #        metaDataDict = process_33_reports(UMserver, UMtoken, beginDateTime, countMonths, outputFile, descendingsort, debug)
-
- #  elif UMversion == "3.4": 
- #        metaDataDict = process_34_reports(UMserver, UMtoken, beginDateTime, countMonths, outputFile, descendingsort, debug)
-
- #  elif UMversion == "3.5": 
- #        metaDataDict = process_35_reports(UMserver, UMtoken, beginDateTime, countMonths, outputFile, descendingsort, debug)
-
- #  else: 
- #       print "Unknown UM Version, " + UMversion + " exiting."
- #       sys.exit(4)
-
 
 if __name__ == "__main__":
    main(sys.argv[1:])

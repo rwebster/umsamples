@@ -5,7 +5,7 @@
  
 ### [umCustomerMgmt](docs/umCustomerMgmt.md) ###
 
-Accepts an input file of customer data and updates the customers in a target Usage Meter Serverin a target Usage Meter Server
+Performs a batch update of Customers in a usage meter server based on an input text file.
 
 * Supports all UM 3.x Versions
 * Updates existing customers and adds new customers

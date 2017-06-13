@@ -1,0 +1,18 @@
+# vCloud Usage Meter Customer Export
+# Version: 1
+# Customers
+# Name	Country	Postal Code
+CustomerZ
+Coke (2022bb46-e685-4202-b5ba-45fef1934076)		
+CustomerA (9517e566-3119-4fb5-b6c4-466960a60c75)		
+CustomerB (23b466f4-bbe4-4f6e-8d15-f7e8458ef0c1)		
+CustomerC	CA	L3R 4N5
+CustomerZ	US	43017
+# Rules
+# Example rule: Exact string folder match for abc for customer CloudCo
+# CloudCo		Folder	Exact String	abc
+# Customer	vCenter	Object Type	Value Type	Value
+Coke (2022bb46-e685-4202-b5ba-45fef1934076)		Folder	Exact string	Coke (2022bb46-e685-4202-b5ba-45fef1934076)
+CustomerA (9517e566-3119-4fb5-b6c4-466960a60c75)		Folder	Exact string	CustomerA (9517e566-3119-4fb5-b6c4-466960a60c75)
+CustomerB (23b466f4-bbe4-4f6e-8d15-f7e8458ef0c1)	10.144.117.147	VM	Unique ID	vm-320
+CustomerB (23b466f4-bbe4-4f6e-8d15-f7e8458ef0c1)		Folder	Exact string	CustomerB (23b466f4-bbe4-4f6e-8d15-f7e8458ef0c1)
