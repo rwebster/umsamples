@@ -1,23 +1,25 @@
 #!/usr/bin/python2.7
 #############
-# This utility retrieves specific bundle data from a usage meter server using the usage meter api.
-# Not all bundle types are returned, The subset of bundles returned were selected to support the analysis of differences between UM versions.
-# 
-# The utility runs from the command line.
-# An input range of report months can be specified using a begindate and enddate.
-# The resulting report data is written to an output file in tab separated format which can be easily imported into excel.
+# This utility updates Customers in a UM Server using values from a tab delimited file.
+#
+# The file format is based on the Customer export file exported by Usage Meter.
+# One customer per line, Values in the line are delimited with a tab character,
+# Each line contains either one value or three values.
+# Customers to be added or updated contain three values, a customer name, country and postal code, each separted by \t
+# Customers to be deleted contain a single value of customer name followed by a new line. 
+# Lines starting with a # characater are comment lines and are ignored
+# A line beginning with # followed by the word Rules, indicate that the remainder of the file contains rule lines,
+# When a line beginning with # Rules is encountered, the rest of the input file lines are ignored.
+#
+# The utility runs from the command line as shown below.
+# Prior to execution, an API token must be generated using the Usage Meter UI and the value passed using the -t flag.
+# The optional -d file enables debug output to stdout
+#
+# python umCustomerMgmt.py -s 10.134.3.240:8443  -t TOKHYCFE05BIHXAUJQJA1NVNRWKWI4EF5DS  -i ../../test/customers.tsv -d
 #
 # Supports Usage Meter Versions 3.2, 3.3, 3.4 and 3.5
 # Requires: Python 2.7.10
-# Author: Bob Webster April 2017
-#   
-# Prior to execution, an API token must be generated using the Usage Meter UI and the value passed with the -t flag.
-#
-# Test Sample 3.5
-# python umCustomerMgmt.py -s 10.134.3.240:8443  -t TOKHYCFE05BIHXAUJQJA1NVNRWKWI4EF5DS  -i ../../test/customers.tsv -d
-#
-#
-# Author: Bob Webster
+# Author: Bob Webster June 2017
 #
 #############
 
@@ -33,9 +35,20 @@ import logging
 
 class UMCustomerMgmt:
 
-    def __init__(self, debug=False):
+    def __init__(self, UMserver, UMtoken, debug=False):
 
         self.debug = debug
+        self.UMserver = UMserver
+        self.UMtoken = UMtoken
+
+        # Connect to server
+        self.create_session()
+
+        # Get all customers and build a name - key dictionary
+        self.custKeyDict = self.get_all_customer_ids()
+        if len(self.custKeyDict) == 0:
+          sys.stderr.write( "Error retrieving customer list from server.\n")
+          sys.exit(3)
 
 
     def find_between(self,  s, first, last ):
@@ -56,69 +69,73 @@ class UMCustomerMgmt:
         headers = {'x-usagemeter-authorization': self.UMtoken, 'Content-Type': 'application/xml', 'User-Agent': 'Mozilla/5.0 (Windows NT 6.0; WOW64; rv:24.0) Gecko/20100101 Firefox/24.0' }
         keyDict = {}
         
-        try:
-          customerList = requests.get("https://" + self.UMserver  + "/um/api/customers", headers=self.headers, verify=False, timeout=10);
+   
+        customerList = requests.get("https://" + self.UMserver  + "/um/api/customers", headers=self.headers, verify=False, timeout=10);
 
-          if self.debug:
-              print customerList.status_code
+        if self.debug:
+            print customerList.status_code
 
-          if customerList.status_code != 200:
-            return keyDict
+        if customerList.status_code != 200:
+          print "Error retrieving customer list"
+          return keyDict # empty
 
-          if self.debug:
-              print customerList.content
+        if self.debug:
+            print customerList.content
 
-          # Parse XML into Dict
+        # Parse XML into Dict
 
-          doc = xmltodict.parse(customerList.content)
-          if self.debug:
-              print "XML Doc as Dict " + str(doc)
+        doc = xmltodict.parse(customerList.content)
+        if self.debug:
+            print "XML Doc as Dict " + str(doc)
 
-          # Build customer name - id dictionay
-     
-          for c in doc['customers']['customer']:
-                keyDict[c['name']] = c['id']
+        # Build customer name - id dictionay
+   
+        for c in doc['customers']['customer']:
+              keyDict[c['name']] = c['id']
 
-          if self.debug:
-              print str(keyDict)
+        if self.debug:
+            print str(keyDict)
 
-        except requests.exceptions.Timeout:
-              print "Unable to access server, timeout"
-              sys.exit(4)
+
 
         return keyDict
 
 
     # Return a single customer record from the UM Server
-    # Returns true on success
-    def get_customer(self, id):
+    # Returns a tuple of success (True or False) and message
+    # message contains the customer in XML format or an error message if status is False
+    def get_customer(self, name):
 
 
         # Get customer
 
         try:
+          id = self.custKeyDict[name]
+
           customer = requests.get("https://" + self.UMserver  + "/um/api/customer/" + id, headers=self.headers, verify=False, timeout=10);
 
           if self.debug:
-              print "https://" + self.UMserver  + "/um/api/customer/" + id
+              print "https://" + self.UMserver  + "/um/api/customer/" + str(id)
               print customer.status_code
               print customer.content
 
           if customer.status_code != 200:
-             print "Error Retrieving customer " + name + " msg= " + customer.content
-             return False
+             print "Error Retrieving customer: " + name + " msg= " + customer.content
+             return (False, "Error Retrieving customer: " + name + " msg= " + customer.content)
 
-          return True
+          return (True, customer.content)
+
+        except KeyError:
+             sys.stderr.write( "Error Retrieving customer: " + name + " does not exist in customer list.\n")
+             return (False, "Error Retrieving customer: " + name + " does not exist in customer list.")
 
 
-        except requests.exceptions.Timeout:
-              print "Unable to access server, timeout"
-              sys.exit(4)
 
 
     # Update an existing customer record in the UM Server
-    # Returns true on success
-    def update_customer(self, id, name, country, postalCode):
+    # Returns a tuple of success (True or False) and message
+    # message contains the customer id in string format or an error message if status is False
+    def update_customer(self, name, country, postalCode):
 
 
         # Update customer
@@ -132,26 +149,32 @@ class UMCustomerMgmt:
                
         try:
 
+          id = self.custKeyDict[name]
+
           customer = requests.put("https://" + self.UMserver  + "/um/api/customer/" + id, headers=self.headers, data=body, verify=False, timeout=10);
 
           if self.debug:
-              print "https://" + self.UMserver  + "/um/api/customer/" + id
+              print "https://" + self.UMserver  + "/um/api/customer/" + str(id)
+              print body
               print customer.status_code
               print customer.content
 
           if customer.status_code != 200:
-              print "Error Updating customer " + name + " msg= " + customer.content
-              return False
+              sys.stderr.write( "Error Updating customer: " + name + " msg= " + customer.content + "\n")
+              return (False,  "Error Updating customer: " + name + " msg= " + customer.content)
 
-          return True
+          return (True, str(id))
 
-        except requests.exceptions.Timeout:
-              print "Unable to access server, timeout"
-              sys.exit(4)
+        except KeyError:
+             sys.stderr.write( "Error updating customer: " + name + " does not exist.\n")
+             return (False, "Error updating customer: " + name + " does not exist.")
+
+
 
 
     # Create an new customer record in the UM Server
-    # Returns true on success
+    # Returns a tuple of success (True or False) and message
+    # message contains the id of the new customer in string format or an error message if status is False
     def create_customer(self, name, country, postalCode):
 
         # Create customer
@@ -162,71 +185,81 @@ class UMCustomerMgmt:
                "<country>" + country + "</country>\n" + \
                "<postalCode>" + postalCode  + "</postalCode>\n" + \
                "</customer>\n"
-
-               
-        try:
-          if self.debug:
-
-             print "https://" + self.UMserver  + "/um/api/customer/" 
-             print body
-
-          customer = requests.post("https://" + self.UMserver  + "/um/api/customer", headers=self.headers, data=body, verify=False, timeout=10);
-
-          if self.debug:
-              print "https://" + self.UMserver  + "/um/api/customer/" + id
-              print customer.status_code
-              print customer.content
-
-          if customer.status_code != 201:
-              print "Error Creating customer " + name + " msg= " + customer.content
-              return False
-
-          return True
+         
 
 
-        except requests.exceptions.Timeout:
-              print "Unable to access server, timeout"
-              sys.exit(4)
+        customer = requests.post("https://" + self.UMserver  + "/um/api/customer", headers=self.headers, data=body, verify=False, timeout=10);
+
+        if self.debug:
+            print "https://" + self.UMserver  + "/um/api/customer/" 
+            print body
+            print customer.status_code
+            print customer.content
+
+        if customer.status_code != 201:
+            print "Error Creating customer " + name + " msg= " + customer.content
+            return (False, "Error Creating customer " + name + " msg= " + customer.content)
+
+        id = self.find_between( customer.content, '<id>', '</id>' )
+        if self.debug:
+            print "New Customer id: " + str(id)
+
+        if len(id) == 0:
+            sys.stderr.write( "Error: Unable to retrieve id for new Customer named " + name + "\n")
+            return (False, "Error: Unable to retrieve id for new Customer named " + name)
+
+        # update customer key map with new entry
+        self.custKeyDict[name] = id
+
+        # prove we can get it
+
+        if self.debug:
+            result = self.get_customer(name)
+            print "Fetch newly created Customer: " + str( result[0]) + " : " + str (result[1])
+
+        return (True, id)
+
+
 
 
     # Delete an existing customer record in the UM Server
-    # Returns true on success
-    def delete_customer(self, name, id):
-
+    # Returns a tuple of success (True or False) and message
+    # message contains the customer id in string format or an error message if status is False
+    def delete_customer(self, name):
 
         # Delete customer
                
         try:
-          if self.debug:
 
-             print "https://" + self.UMserver  + "/um/api/customer/" 
-             print body
+          id = self.custKeyDict[name]
 
           customer = requests.delete("https://" + self.UMserver  + "/um/api/customer/" + id, headers=self.headers, verify=False, timeout=10);
 
           if self.debug:
-              print "https://" + self.UMserver  + "/um/api/customer/" + id
+              print "https://" + self.UMserver  + "/um/api/customer/" + str(id)
               print customer.status_code
               print customer.content
 
           if customer.status_code != 204:
-              print "Error Deleting customer " + name + " msg= " + customer.content
-              return False
-
-          return True
+              sys.stderr.write( "Error Deleting customer " + name + " msg= " + customer.content + "\n")
+              return (False, "Error Deleting customer " + name + " msg= " + customer.content)
 
 
-        except requests.exceptions.Timeout:
-              print "Unable to access server, timeout"
-              sys.exit(4)
+          #  update customers key list
+          del self.custKeyDict[name]
+  
+          return (True, str(id))
+
+
+        except KeyError:
+             sys.stderr.write( "Error deleting customer: " + name + " does not exist in local list.\n")
+             return (False, "Error deleting customer: " + name + " does not exist in local list.")
 
     # Retrieve UM Banner page to determine UM Version and set required SSL settings.
     # setup SSL for varying versions of Usage Meter and define a retry count for API calls
-    def create_session(self, UMserver, UMtoken):
+    def create_session(self):
 
-        self.UMserver = UMserver
-        self.UMtoken = UMtoken
-        self.headers = {'x-usagemeter-authorization': UMtoken,  'Content-Type': 'application/xml', 'User-Agent': 'Mozilla/5.0 (Windows NT 6.0; WOW64; rv:24.0) Gecko/20100101 Firefox/24.0' }
+        self.headers = {'x-usagemeter-authorization': self.UMtoken,  'Content-Type': 'application/xml', 'User-Agent': 'Mozilla/5.0 (Windows NT 6.0; WOW64; rv:24.0) Gecko/20100101 Firefox/24.0' }
 
 
         # Supress associated InsecureRequestWarning for UM with Self Signed Cert
@@ -244,7 +277,8 @@ class UMCustomerMgmt:
         try:
              banner = requests.get("https://" + self.UMserver  + "/um/", headers=self.headers, verify=False, timeout=10);
              v = self.find_between( banner.content, 'VMware vCloud Usage Meter ', '</title>' )
-             print "UM Version: " + v
+             if self.debug:
+                 print "UM Version: " + v
         except requests.exceptions.SSLError as e:
 
            # For UM 3.2, 3.3 or 3.4 Versions
@@ -261,7 +295,7 @@ class UMCustomerMgmt:
                v = self.find_between( banner.text, 'VMware vCloud Usage Meter ', '</title>' )
                print "UM Version: " + v
            except requests.exceptions.SSLError as e:
-               print "http.requests ssl error: " + str(e)
+               sys.stderr.write( "http.requests ssl error: " + str(e) + "\n")
                sys.exit(2)
 
         except requests.exceptions.RequestException as e:
@@ -271,24 +305,15 @@ class UMCustomerMgmt:
         #   Use alternative transport adapter to set retry count
         #   So rety if    requests.exceptions.ConnectionError
              
-        requests.Session().mount('https://' + UMserver, HTTPAdapter(max_retries=5))
+        requests.Session().mount('https://' + self.UMserver, HTTPAdapter(max_retries=5))
 
     # Returns a dictionary of counters, records updatedCount, createdCount, deletedCount and errorCount
-    def process_file(self, UMserver, UMtoken, inputFile):
+    def process_file(self, inputFile):
 
         updatedCount =0
         createdCount =0
         deletedCount =0
         errorCount =0
-
-        # Connect to server
-        self.create_session(UMserver, UMtoken)
-
-        # Get all customers and build a name - key dictionary
-        self.custKeyDict = self.get_all_customer_ids()
-        if len(self.custKeyDict) == 0:
-          print "Error retrieving customer list from server."
-          sys.exit(3)
 
 
         # open input file
@@ -297,8 +322,8 @@ class UMCustomerMgmt:
            f_input_file = open(inputFile, 'r')
 
         except (Exception) as error:
-            print "Error: Unable to open specified input file."
-            print(error)
+            sys.stderr.write( "Error: Unable to open specified input file. \n")
+            sys.stderr.write(str(error) + "\n")
             sys.exit(4)
 
         print "Successfully opened input file.  \n"
@@ -318,12 +343,14 @@ class UMCustomerMgmt:
                                
                                # delete request? Name and no other columns?
                                if len(record) == 1:
-                                    if self.delete_customer(record[0], self.custKeyDict[record[0]]):
+                                    result = self.delete_customer(record[0])
+                                    if result[0]:
                                        deletedCount = deletedCount + 1
                                     else:
                                         errorCount = errorCount + 1
                                else:
-                                    if self.update_customer(self.custKeyDict[record[0]], record[0], record[1], record[2]):
+                                    result = self.update_customer( record[0], record[1], record[2])
+                                    if result[0]:
                                         updatedCount = updatedCount + 1
                                     else: 
                                         errorCount = errorCount + 1
@@ -331,22 +358,23 @@ class UMCustomerMgmt:
                           # New Customer
                           else: 
                                if len(record) == 1:
-                                   print "Error: Customer " + record[0] + " does not exist and cannot be deleted."
+                                   sys.stderr.write( "Error: Customer " + record[0] + " does not exist and cannot be deleted.\n")
                                    errorCount = errorCount + 1
                                else:
                                  #                                  customerName, Country, PostalCode
-                                 if self.create_customer(record[0], record[1], record[2]):
-                                    createdCount = createdCount + 1
-                                 else:
-                                    errorCount = errorCount + 1
+                                    result = self.create_customer(record[0], record[1], record[2])
+                                    if result[0]:
+                                       createdCount = createdCount + 1
+                                    else:
+                                       errorCount = errorCount + 1
 
           
             return {'createdCount': createdCount, 'updatedCount': updatedCount, 'deletedCount': deletedCount, 'errorCount': errorCount}
 
 
         except (Exception) as error:
-            print "Error: Processing Error "
-            print(error)
+            sys.stderr.write( "Error: Processing Error \n")
+            sys.stderr.write(str(error) + "\n")
             print traceback.format_exc()
 
 
@@ -367,7 +395,7 @@ class UMCustomerMgmt:
 
     def usage():
 
-          print 'Usage umManageCustomers.py -s 10.32.51.xxx:8443  -t TOK3W1T0BZZGBQ4CUIEFSUF4B3RDX3ETUDT  -i  ./customerFile.tsv -d' 
+          print 'Usage umManageCustomers.py -s 127.0.0.1:8443  -t TOK3W1T0BZZGBQ4CUIEFSUF4B3RDX3ETUDT  -i  ./customerFile.tsv -d' 
           print ' -s  = Usage Meter Appliance and port'
           print ' -t  = API Token from Usage Meter for API authentication'
           print ' -i  = customer input file containing custmoers in tab separated format'
@@ -413,9 +441,9 @@ def main(argv):
      sys.exit(3)
 
 
-    mgr = UMCustomerMgmt(debug)
-    results = mgr.process_file(UMserver, UMtoken, inputFile)
-    print str(results)
+    mgr = UMCustomerMgmt(UMserver, UMtoken, debug)
+    results = mgr.process_file(inputFile)
+
     print "\nProcessing complete."
     print "\tCreated Customers  " + str(results['createdCount'])
     print "\tUpdated Customers: " + str(results['updatedCount'])
