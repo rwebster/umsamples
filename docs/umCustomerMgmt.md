@@ -53,11 +53,23 @@ CustomerC
 # Customer      vCenter Object Type     Value Type      Value
 ```
 
+___Usage___
+
+umManageCustomers.py -s 127.0.0.1:8443  -t umtoken  -i  inputFile [-d] 
+
+-s  - Usage Meter Appliance and port
+
+-t  - API Token from Usage Meter for API authentication
+
+-i  - customer input file containing customer data in tab separated format
+
+-d  - debug [Optional]
+
+
 ___Sample Usage___ 
 
-
 ```
-python umCustomerMgmt.py -s 10.134.3.240:8443  -t TOKHYCFE05BIHXAUJQJA1NVNRWKWI4EF5DS  -i /tmp/customers.tsv -d
+python umCustomerMgmt.py -s 10.134.3.240:8443  -t TOKHYCFE05BIHXAUJQJA1NVNRWKWI4EF5DS  -i /tmp/customers.tsv 
 ```
 
 ___Sample Output___
