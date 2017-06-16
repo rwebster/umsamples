@@ -12,3 +12,7 @@ Performs a batch update of Customers in a usage meter server based on an input t
 
 
 ### [Installation](docs/installation.md) ###
+
+
+## License
+These samples are available under the [Apache 2 license](LICENSE).
