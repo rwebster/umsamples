@@ -102,7 +102,6 @@ class UMCustomerMgmt:
     # message contains the customer in XML format or an error message if status is False
     def get_customer(self, name):
 
-
         # Get customer
 
         try:
@@ -116,8 +115,7 @@ class UMCustomerMgmt:
               print customer.content
 
           if customer.status_code != 200:
-             print "Error Retrieving customer: " + name + " msg= " + customer.content
-             return (False, "Error Retrieving customer: " + name  + " http Status: " +  str(customerList.status_code) +
+             return (False, "Error Retrieving customer: " + name  + " http Status: " +  str(customer.status_code) +
                     " msg= " + customer.content)
 
           return (True, customer.content)
@@ -156,7 +154,7 @@ class UMCustomerMgmt:
               print customer.content
 
           if customer.status_code != 200:
-              return (False, "Error Updating customer: " + name  + " http Status: " +  str(customerList.status_code) +
+              return (False, "Error Updating customer: " + name  + " http Status: " +  str(customer.status_code) +
                     " msg= " + customer.content)
 
           return (True, str(id))
@@ -192,7 +190,7 @@ class UMCustomerMgmt:
             print customer.content
 
         if customer.status_code != 201:
-             return (False, "Error Creating customer: " + name  + " http Status: " +  str(customerList.status_code) +
+             return (False, "Error Creating customer: " + name  + " http Status: " +  str(customer.status_code) +
                     " msg= " + customer.content)
 
         id = self.find_between( customer.content, '<id>', '</id>' )
@@ -234,7 +232,7 @@ class UMCustomerMgmt:
               print customer.content
 
           if customer.status_code != 204:
-              return (False, "Error Deleting customer: " + name  + " http Status: " +  str(customerList.status_code) +
+              return (False, "Error Deleting customer: " + name  + " http Status: " +  str(customer.status_code) +
                     " msg= " + customer.content)
 
 
@@ -329,28 +327,41 @@ class UMCustomerMgmt:
                                if len(record) == 1:
                                     result = self.delete_customer(record[0])
                                     if result[0]:
+                                       print( "Deleted:  " + record[0] + "\n")
                                        deletedCount = deletedCount + 1
                                     else:
+                                        print( "Delete Error: " + record[0] + " " + record[1] + "\n")
                                         errorCount = errorCount + 1
+                               # Bad record
                                else:
-                                    result = self.update_customer( record[0], record[1], record[2])
-                                    if result[0]:
-                                        updatedCount = updatedCount + 1
-                                    else: 
+                                    if len(record) == 2:
+                                        print( "Bad Record missing \\t: " + str(record) + "\n")
                                         errorCount = errorCount + 1
+                                    else:
+                                          # Update -                    customerName, Country, PostalCode
+                                          result = self.update_customer( record[0], record[1], record[2])
+                                          if result[0]:
+                                              print( "Updated:  " + record[0] + "\n")
+                                              updatedCount = updatedCount + 1
+                                          else: 
+                                              print( "Update Error: " + record[0] + " " + record[1] + "\n")
+                                              errorCount = errorCount + 1
 
-                          # New Customer
+                          # Create Customer since unknown customer
                           else: 
+                               # unless one field, then an unknown delete
                                if len(record) == 1:
-                                   sys.stderr.write( "Error: Customer " + record[0] + " does not exist and cannot be deleted.\n")
+                                   print( "Delete Error: " + record[0] + " does not exist and cannot be deleted.\n")
                                    errorCount = errorCount + 1
                                else:
-                                 #                                  customerName, Country, PostalCode
+                                   #  Create -                    customerName, Country, PostalCode
                                     result = self.create_customer(record[0], record[1], record[2])
                                     if result[0]:
+                                       print( "Created:  " + record[0] + "\n")
                                        createdCount = createdCount + 1
                                     else:
                                        errorCount = errorCount + 1
+                                       print( "Create Error: " + record[0] + " " + record[1] + "\n")
 
             return  {'createdCount': createdCount, 'updatedCount': updatedCount, 'deletedCount': deletedCount, 'errorCount': errorCount}
 
@@ -385,9 +396,8 @@ class UMCustomerMgmt:
 
 def main(argv):
 
-   
     # Process command line input
-   
+ 
     debug = False
 
     try:
@@ -423,15 +433,20 @@ def main(argv):
         results = mgr.process_file(inputFile)
 
         print "\nProcessing complete."
-        print "\tCreated Customers  " + str(results['createdCount'])
-        print "\tUpdated Customers: " + str(results['updatedCount'])
-        print "\tDeleted Customers  " + str(results['deletedCount'])
-        print "\tError Count: " + str(results['errorCount'])
+        print "\tCreated: " + str(results['createdCount'])
+        print "\tUpdated: " + str(results['updatedCount'])
+        print "\tDeleted: " + str(results['deletedCount'])
+        print "\tErrors:  " + str(results['errorCount'])
+
+        sys.stdout.flush()
+    
 
     except (Exception) as error:
         sys.stderr.write( "Error: Processing Error \n")
         sys.stderr.write(str(error) + "\n")
         print traceback.format_exc()
 
+
 if __name__ == "__main__":
    main(sys.argv[1:])
+

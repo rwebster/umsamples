@@ -9,6 +9,12 @@ CustomerV	US	43017
 # Update customer
 CustomerV	US	94304
 
+# Bad Record missing one \t or missing zip
+CustomerV	US 94304
+
+# Bad Record missing two \t - looks like single field delete request
+CustomerV US 94304
+
 # Delete new customer
 CustomerV
 

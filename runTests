@@ -1,1 +1,1 @@
-python test/testUmCustomerMgmt.py 10.134.3.240:8443 TOKHYCFE05BIHXAUJQJA1NVNRWKWI4EF5DS 
+python test/testUmCustomerMgmt.py 10.134.3.240:8443 TOKHYCFE05BIHXAUJQJA1NVNRWKWI4EF5DS ./test/customers.tsv
