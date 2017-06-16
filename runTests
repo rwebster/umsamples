@@ -1,1 +1,1 @@
-python test/testUmCustomerMgmt.py 10.134.3.240:8443 TOKHYCFE05BIHXAUJQJA1NVNRWKWI4EF5DS 2> /tmp/logfile.txt
+python test/testUmCustomerMgmt.py 10.134.3.240:8443 TOKHYCFE05BIHXAUJQJA1NVNRWKWI4EF5DS 

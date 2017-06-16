@@ -1,5 +1,5 @@
 
-import unittest, sys
+import unittest, sys, requests.exceptions
 
 # Sample usage
 # cd umsamples
@@ -20,40 +20,51 @@ class TestUmCustomerMgmt(unittest.TestCase):
         self.mgr = UMCustomerMgmt(self.UMserver, self.UMtoken)
 
     def test_create_get_update_delete(self):
-        print "test_create_get_update_delete - Create"
+        print "Test Create"
         result = self.mgr.create_customer('CustomerZ', 'US', '43017')
         self.assertTrue(result[0], result[1])
 
-        print "test_create_get_update_delete - Get"
+        print "Test Get"
         result = self.mgr.get_customer('CustomerZ')
         self.assertTrue(result[0], result[1])
         self.assertTrue("<name>CustomerZ</name>" in result[1])
 
-        print "test_create_get_update_delete - Update"
+        print "Test Update"
         result = self.mgr.update_customer('CustomerZ', 'US', '94304')
         self.assertTrue(result[0], result[1])
 
-        print "test_create_get_update_delete - Verify Update"
+        print "Test Verify Update"
         result = self.mgr.get_customer('CustomerZ')
         self.assertTrue(result[0], result[1])
         self.assertTrue("<postalCode>94304</postalCode>" in result[1])
 
-        print "test_create_get_update_delete - Delete"
+        print "Test Delete"
         result = self.mgr.delete_customer('CustomerZ')
         self.assertTrue(result[0],result[1])
 
 
     def test_delete_unknown_customer(self):
 
-        print "test_delete_unknown_customer"
+        print "Test Delete Unkown Customer"
         result = self.mgr.delete_customer('CustomerQ')
         self.assertFalse(result[0])
 
     def test_get_unknown_customer(self):
 
-        print "test_get_unknown_customer"
+        print "Test Get Unkown Customer"
         result = self.mgr.delete_customer('CustomerQ')
         self.assertFalse(result[0])
+
+    def test_bad_server(self):
+
+        print "Test Bad Server Name"
+        with self.assertRaises(requests.exceptions.ConnectionError):
+            UMCustomerMgmt("unknownServer:8443", "ANYTOKEN")
+
+    def test_process_file(self):
+
+        print "Test Process Input File"
+        self.mgr.process_file("./test/customers.tsv")
 
 
 if __name__ == '__main__':
@@ -79,6 +90,7 @@ if __name__ == '__main__':
 
     suite = unittest.TestSuite()
     for test_name in test_names:
+
         suite.addTest(TestUmCustomerMgmt(test_name, server, token))
 
     result = unittest.TextTestRunner().run(suite)

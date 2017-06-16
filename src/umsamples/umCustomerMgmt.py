@@ -44,11 +44,8 @@ class UMCustomerMgmt:
         # Connect to server
         self.create_session()
 
-        # Get all customers and build a name - key dictionary
+        # Get all customers from UM Server and build a name - key dictionary
         self.custKeyDict = self.get_all_customer_ids()
-        if len(self.custKeyDict) == 0:
-          sys.stderr.write( "Error retrieving customer list from server.\n")
-          sys.exit(3)
 
 
     def find_between(self,  s, first, last ):
@@ -62,7 +59,6 @@ class UMCustomerMgmt:
 
 
     # Get all customers and build a dictionary of customer name to id.
-    # returns a dictionary where key=customername value=id otherwise an empty dictionary
     def get_all_customer_ids(self):
 
         # Using Session, token no longer required, note put/post calls return 403 without Content-Type: application/xml
@@ -76,10 +72,11 @@ class UMCustomerMgmt:
             print customerList.status_code
 
         if customerList.status_code != 200:
-          print "Error retrieving customer list"
-          return keyDict # empty
+          raise NameError("Http Error: " + str(customerList.status_code)  + 
+                          " Unable to retrieve customer list from UM Server")
 
         if self.debug:
+            print "Customer List:"
             print customerList.content
 
         # Parse XML into Dict
@@ -94,9 +91,8 @@ class UMCustomerMgmt:
               keyDict[c['name']] = c['id']
 
         if self.debug:
+            print "Name-id Dictionary"
             print str(keyDict)
-
-
 
         return keyDict
 
@@ -121,13 +117,13 @@ class UMCustomerMgmt:
 
           if customer.status_code != 200:
              print "Error Retrieving customer: " + name + " msg= " + customer.content
-             return (False, "Error Retrieving customer: " + name + " msg= " + customer.content)
+             return (False, "Error Retrieving customer: " + name  + " http Status: " +  str(customerList.status_code) +
+                    " msg= " + customer.content)
 
           return (True, customer.content)
 
         except KeyError:
-             sys.stderr.write( "Error Retrieving customer: " + name + " does not exist in customer list.\n")
-             return (False, "Error Retrieving customer: " + name + " does not exist in customer list.")
+             return (False, "Error Retrieving customer: " + name + " not in customer-key list.")
 
 
 
@@ -160,14 +156,13 @@ class UMCustomerMgmt:
               print customer.content
 
           if customer.status_code != 200:
-              sys.stderr.write( "Error Updating customer: " + name + " msg= " + customer.content + "\n")
-              return (False,  "Error Updating customer: " + name + " msg= " + customer.content)
+              return (False, "Error Updating customer: " + name  + " http Status: " +  str(customerList.status_code) +
+                    " msg= " + customer.content)
 
           return (True, str(id))
 
         except KeyError:
-             sys.stderr.write( "Error updating customer: " + name + " does not exist.\n")
-             return (False, "Error updating customer: " + name + " does not exist.")
+              return (False, "Error Updating customer: " + name + " not in customer-key list.")
 
 
 
@@ -197,22 +192,20 @@ class UMCustomerMgmt:
             print customer.content
 
         if customer.status_code != 201:
-            print "Error Creating customer " + name + " msg= " + customer.content
-            return (False, "Error Creating customer " + name + " msg= " + customer.content)
+             return (False, "Error Creating customer: " + name  + " http Status: " +  str(customerList.status_code) +
+                    " msg= " + customer.content)
 
         id = self.find_between( customer.content, '<id>', '</id>' )
         if self.debug:
             print "New Customer id: " + str(id)
 
         if len(id) == 0:
-            sys.stderr.write( "Error: Unable to retrieve id for new Customer named " + name + "\n")
             return (False, "Error: Unable to retrieve id for new Customer named " + name)
 
         # update customer key map with new entry
         self.custKeyDict[name] = id
 
-        # prove we can get it
-
+        # for debug, prove we can get it
         if self.debug:
             result = self.get_customer(name)
             print "Fetch newly created Customer: " + str( result[0]) + " : " + str (result[1])
@@ -241,22 +234,22 @@ class UMCustomerMgmt:
               print customer.content
 
           if customer.status_code != 204:
-              sys.stderr.write( "Error Deleting customer " + name + " msg= " + customer.content + "\n")
-              return (False, "Error Deleting customer " + name + " msg= " + customer.content)
+              return (False, "Error Deleting customer: " + name  + " http Status: " +  str(customerList.status_code) +
+                    " msg= " + customer.content)
 
 
-          #  update customers key list
+          #  remove customer from key list
           del self.custKeyDict[name]
   
           return (True, str(id))
 
 
         except KeyError:
-             sys.stderr.write( "Error deleting customer: " + name + " does not exist in local list.\n")
-             return (False, "Error deleting customer: " + name + " does not exist in local list.")
+          return (False, "Error Deleting customer: " + name + "  not in customer-key list.")
 
-    # Retrieve UM Banner page to determine UM Version and set required SSL settings.
-    # setup SSL for varying versions of Usage Meter and define a retry count for API calls
+    # Retrieve UM Banner page to determine UM Version 
+    # setup SSL for different versions of Usage Meter and define a retry count for all http calls
+    # Raises requests.exceptions.SSLError or requests.exceptions.RequestException or requests.exceptions.ConnectTimeout on failure
     def create_session(self):
 
         self.headers = {'x-usagemeter-authorization': self.UMtoken,  'Content-Type': 'application/xml', 'User-Agent': 'Mozilla/5.0 (Windows NT 6.0; WOW64; rv:24.0) Gecko/20100101 Firefox/24.0' }
@@ -290,24 +283,19 @@ class UMCustomerMgmt:
            except AttributeError:
               # no pyopenssl support used / needed / available
                pass
-           try:    
-               banner = requests.get("https://" + self.UMserver  + "/um/", headers=self.headers, verify=False, timeout=10);
-               v = self.find_between( banner.text, 'VMware vCloud Usage Meter ', '</title>' )
-               print "UM Version: " + v
-           except requests.exceptions.SSLError as e:
-               sys.stderr.write( "http.requests ssl error: " + str(e) + "\n")
-               sys.exit(2)
 
-        except requests.exceptions.RequestException as e:
-           print "http.requests error: " + str(e)
-           sys.exit(2)
+           banner = requests.get("https://" + self.UMserver  + "/um/", headers=self.headers, verify=False, timeout=10);
+           v = self.find_between( banner.text, 'VMware vCloud Usage Meter ', '</title>' )
+           print "UM Version: " + v
 
         #   Use alternative transport adapter to set retry count
         #   So rety if    requests.exceptions.ConnectionError
              
         requests.Session().mount('https://' + self.UMserver, HTTPAdapter(max_retries=5))
 
+
     # Returns a dictionary of counters, records updatedCount, createdCount, deletedCount and errorCount
+    # or an exception on failure
     def process_file(self, inputFile):
 
         updatedCount =0
@@ -315,16 +303,10 @@ class UMCustomerMgmt:
         deletedCount =0
         errorCount =0
 
-
         # open input file
-        try:
-           csv.register_dialect('tab', delimiter='\t')
-           f_input_file = open(inputFile, 'r')
 
-        except (Exception) as error:
-            sys.stderr.write( "Error: Unable to open specified input file. \n")
-            sys.stderr.write(str(error) + "\n")
-            sys.exit(4)
+        csv.register_dialect('tab', delimiter='\t')
+        f_input_file = open(inputFile, 'r')
 
         print "Successfully opened input file.  \n"
 
@@ -333,10 +315,12 @@ class UMCustomerMgmt:
 
             # Read input file, ignoring rules section and comments
             for record in reader:
+                     if len(record) == 0:
+                          continue
                      if record[0].startswith('# Rules'):
                           break
                      elif record[0].startswith('#'):
-                          next(reader)
+                          continue
                      else:
                           # Existing customer?
                           if record[0] in self.custKeyDict:
@@ -368,16 +352,9 @@ class UMCustomerMgmt:
                                     else:
                                        errorCount = errorCount + 1
 
-          
-            return {'createdCount': createdCount, 'updatedCount': updatedCount, 'deletedCount': deletedCount, 'errorCount': errorCount}
+            return  {'createdCount': createdCount, 'updatedCount': updatedCount, 'deletedCount': deletedCount, 'errorCount': errorCount}
 
-
-        except (Exception) as error:
-            sys.stderr.write( "Error: Processing Error \n")
-            sys.stderr.write(str(error) + "\n")
-            print traceback.format_exc()
-
-
+        # return any exception
         finally:
             f_input_file.close()
 
@@ -398,7 +375,7 @@ class UMCustomerMgmt:
           print 'Usage umManageCustomers.py -s 127.0.0.1:8443  -t TOK3W1T0BZZGBQ4CUIEFSUF4B3RDX3ETUDT  -i  ./customerFile.tsv -d' 
           print ' -s  = Usage Meter Appliance and port'
           print ' -t  = API Token from Usage Meter for API authentication'
-          print ' -i  = customer input file containing custmoers in tab separated format'
+          print ' -i  = customer input file containing customer data in tab separated format'
           print ' -d  = debug'
 
 
@@ -440,15 +417,21 @@ def main(argv):
      usage()
      sys.exit(3)
 
+    try:
 
-    mgr = UMCustomerMgmt(UMserver, UMtoken, debug)
-    results = mgr.process_file(inputFile)
+        mgr = UMCustomerMgmt(UMserver, UMtoken, debug)
+        results = mgr.process_file(inputFile)
 
-    print "\nProcessing complete."
-    print "\tCreated Customers  " + str(results['createdCount'])
-    print "\tUpdated Customers: " + str(results['updatedCount'])
-    print "\tDeleted Customers  " + str(results['deletedCount'])
-    print "\tError Count: " + str(results['errorCount'])
+        print "\nProcessing complete."
+        print "\tCreated Customers  " + str(results['createdCount'])
+        print "\tUpdated Customers: " + str(results['updatedCount'])
+        print "\tDeleted Customers  " + str(results['deletedCount'])
+        print "\tError Count: " + str(results['errorCount'])
+
+    except (Exception) as error:
+        sys.stderr.write( "Error: Processing Error \n")
+        sys.stderr.write(str(error) + "\n")
+        print traceback.format_exc()
 
 if __name__ == "__main__":
    main(sys.argv[1:])

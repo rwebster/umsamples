@@ -2,12 +2,16 @@
 # Version: 1
 # Customers
 # Name	Country	Postal Code
-CustomerZ
-Coke (2022bb46-e685-4202-b5ba-45fef1934076)		
-CustomerA (9517e566-3119-4fb5-b6c4-466960a60c75)		
-CustomerB (23b466f4-bbe4-4f6e-8d15-f7e8458ef0c1)		
-CustomerC	CA	L3R 4N5
-CustomerZ	US	43017
+
+# Create new customer
+CustomerV	US	43017
+
+# Update customer
+CustomerV	US	94304
+
+# Delete new customer
+CustomerV
+
 # Rules
 # Example rule: Exact string folder match for abc for customer CloudCo
 # CloudCo		Folder	Exact String	abc
