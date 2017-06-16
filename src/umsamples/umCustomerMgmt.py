@@ -268,8 +268,8 @@ class UMCustomerMgmt:
         try:
              banner = requests.get("https://" + self.UMserver  + "/um/", headers=self.headers, verify=False, timeout=10);
              v = self.find_between( banner.content, 'VMware vCloud Usage Meter ', '</title>' )
-             if self.debug:
-                 print "UM Version: " + v
+             print "Connect to " + "https://" + self.UMserver  + "/um/"
+             print "UM Version: " + v
         except requests.exceptions.SSLError as e:
 
            # For UM 3.2, 3.3 or 3.4 Versions
@@ -327,41 +327,41 @@ class UMCustomerMgmt:
                                if len(record) == 1:
                                     result = self.delete_customer(record[0])
                                     if result[0]:
-                                       print( "Deleted:  " + record[0] + "\n")
+                                       print( "Deleted:  " + record[0])
                                        deletedCount = deletedCount + 1
                                     else:
-                                        print( "Delete Error: " + record[0] + " " + record[1] + "\n")
+                                        print( "Delete Error: " + record[0] + " " + record[1])
                                         errorCount = errorCount + 1
                                # Bad record
                                else:
                                     if len(record) == 2:
-                                        print( "Bad Record missing \\t: " + str(record) + "\n")
+                                        print( "Bad Record missing \\t: " + str(record))
                                         errorCount = errorCount + 1
                                     else:
                                           # Update -                    customerName, Country, PostalCode
                                           result = self.update_customer( record[0], record[1], record[2])
                                           if result[0]:
-                                              print( "Updated:  " + record[0] + "\n")
+                                              print( "Updated:  " + record[0])
                                               updatedCount = updatedCount + 1
                                           else: 
-                                              print( "Update Error: " + record[0] + " " + record[1] + "\n")
+                                              print( "Update Error: " + record[0] + " " + record[1])
                                               errorCount = errorCount + 1
 
                           # Create Customer since unknown customer
                           else: 
                                # unless one field, then an unknown delete
                                if len(record) == 1:
-                                   print( "Delete Error: " + record[0] + " does not exist and cannot be deleted.\n")
+                                   print( "Delete Error: " + record[0] + " does not exist and cannot be deleted.")
                                    errorCount = errorCount + 1
                                else:
                                    #  Create -                    customerName, Country, PostalCode
                                     result = self.create_customer(record[0], record[1], record[2])
                                     if result[0]:
-                                       print( "Created:  " + record[0] + "\n")
+                                       print( "Created:  " + record[0])
                                        createdCount = createdCount + 1
                                     else:
                                        errorCount = errorCount + 1
-                                       print( "Create Error: " + record[0] + " " + record[1] + "\n")
+                                       print( "Create Error: " + record[0] + " " + record[1])
 
             return  {'createdCount': createdCount, 'updatedCount': updatedCount, 'deletedCount': deletedCount, 'errorCount': errorCount}
 
@@ -433,10 +433,10 @@ def main(argv):
         results = mgr.process_file(inputFile)
 
         print "\nProcessing complete."
-        print "\tCreated: " + str(results['createdCount'])
-        print "\tUpdated: " + str(results['updatedCount'])
-        print "\tDeleted: " + str(results['deletedCount'])
-        print "\tErrors:  " + str(results['errorCount'])
+        print "Created: " + str(results['createdCount'])
+        print "Updated: " + str(results['updatedCount'])
+        print "Deleted: " + str(results['deletedCount'])
+        print "Errors:  " + str(results['errorCount'])
 
         sys.stdout.flush()
     

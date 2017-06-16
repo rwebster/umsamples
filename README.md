@@ -11,5 +11,4 @@ Performs a batch update of Customers in a usage meter server based on an input t
 * Updates existing customers and adds new customers
 
 
-
 ### [Installation](docs/installation.md) ###
